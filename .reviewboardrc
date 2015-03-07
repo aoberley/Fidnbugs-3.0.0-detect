@@ -1,0 +1,4 @@
+REVIEWBOARD_URL = "http://reviewboard.server.com"
+REPOSITORY = "Findbugs-3.0.0-detect "
+BRANCH = "master"
+LAND_DEST_BRANCH = "master"
