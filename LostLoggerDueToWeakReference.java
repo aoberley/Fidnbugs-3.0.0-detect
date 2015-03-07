@@ -19,7 +19,9 @@
 
 package edu.umd.cs.findbugs.detect;
 
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 
 import org.apache.bcel.classfile.Code;
 
@@ -27,7 +29,9 @@ import edu.umd.cs.findbugs.BugAccumulator;
 import edu.umd.cs.findbugs.BugInstance;
 import edu.umd.cs.findbugs.BugReporter;
 import edu.umd.cs.findbugs.OpcodeStack;
+import edu.umd.cs.findbugs.ba.ClassContext;
 import edu.umd.cs.findbugs.bcel.OpcodeStackDetector;
+import edu.umd.cs.findbugs.classfile.MethodDescriptor;
 import edu.umd.cs.findbugs.visitclass.PreorderVisitor;
 
 /**
@@ -40,6 +44,9 @@ import edu.umd.cs.findbugs.visitclass.PreorderVisitor;
  * that memory, which means that the logger configuration is lost.
  */
 public class LostLoggerDueToWeakReference extends OpcodeStackDetector {
+    private static final List<MethodDescriptor> methods = Arrays.asList(
+            new MethodDescriptor("java/util/logging/Logger", "getLogger", "(Ljava/lang/String;)Ljava/util/logging/Logger;", true),
+            new MethodDescriptor("java/util/logging/Logger", "getLogger", "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/logging/Logger;", true));
 
     //    final BugReporter bugReporter;
 
@@ -54,6 +61,13 @@ public class LostLoggerDueToWeakReference extends OpcodeStackDetector {
         namesOfSetterMethods.add("setUseParentHandlers");
         namesOfSetterMethods.add("setLevel");
         namesOfSetterMethods.add("setFilter");
+    }
+
+    @Override
+    public void visitClassContext(ClassContext classContext) {
+        if(hasInterestingMethod(classContext.getJavaClass().getConstantPool(), methods)) {
+            super.visitClassContext(classContext);
+        }
     }
 
     @Override
@@ -89,7 +103,7 @@ public class LostLoggerDueToWeakReference extends OpcodeStackDetector {
         }
         switch (seen) {
         case INVOKESTATIC:
-            if (getClassConstantOperand().equals("java/util/logging/Logger") && getNameConstantOperand().equals("getLogger")) {
+            if ("java/util/logging/Logger".equals(getClassConstantOperand()) && "getLogger".equals(getNameConstantOperand())) {
                 OpcodeStack.Item item = stack.getStackItem(0);
                 if (!"".equals(item.getConstant())) {
                     sawGetLogger = getPC();
@@ -99,10 +113,10 @@ public class LostLoggerDueToWeakReference extends OpcodeStackDetector {
             checkForImport();
             break;
         case INVOKEVIRTUAL:
-            if (getClassConstantOperand().equals("java/util/logging/Logger")
+            if ("java/util/logging/Logger".equals(getClassConstantOperand())
                     && namesOfSetterMethods.contains(getNameConstantOperand())) {
                 int priority = HIGH_PRIORITY;
-                if (getMethod().isStatic() && getMethodName().equals("main") && getMethodSig().equals("([Ljava/lang/String;)V")) {
+                if (getMethod().isStatic() && "main".equals(getMethodName()) && "([Ljava/lang/String;)V".equals(getMethodSig())) {
                     priority = NORMAL_PRIORITY;
                 }
 

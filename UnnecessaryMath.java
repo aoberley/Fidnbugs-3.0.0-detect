@@ -20,6 +20,7 @@
 
 package edu.umd.cs.findbugs.detect;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -33,6 +34,7 @@ import edu.umd.cs.findbugs.BugInstance;
 import edu.umd.cs.findbugs.BugReporter;
 import edu.umd.cs.findbugs.BytecodeScanningDetector;
 import edu.umd.cs.findbugs.StatelessDetector;
+import edu.umd.cs.findbugs.ba.ClassContext;
 
 /**
  * Find occurrences of Math using constants, where the result of the calculation
@@ -109,10 +111,17 @@ public class UnnecessaryMath extends BytecodeScanningDetector implements Statele
     }
 
     @Override
+    public void visitClassContext(ClassContext classContext) {
+        if(hasInterestingClass(classContext.getJavaClass().getConstantPool(), Collections.singleton("java/lang/Math"))) {
+            super.visitClassContext(classContext);
+        }
+    }
+
+    @Override
     public void visit(Code obj) {
         // Don't complain about unnecessary math calls in class initializers,
         // since they may be there to improve readability.
-        if (getMethod().getName().equals("<clinit>")) {
+        if ("<clinit>".equals(getMethod().getName())) {
             return;
         }
 
@@ -142,7 +151,7 @@ public class UnnecessaryMath extends BytecodeScanningDetector implements Statele
         } else if (state == SEEN_DCONST) {
             if (seen == INVOKESTATIC) {
                 state = SEEN_NOTHING;
-                if (getDottedClassConstantOperand().equals("java.lang.Math")) {
+                if ("java.lang.Math".equals(getDottedClassConstantOperand())) {
                     String methodName = getNameConstantOperand();
 
                     if (((constValue == 0.0) && zeroMethods.contains(methodName))

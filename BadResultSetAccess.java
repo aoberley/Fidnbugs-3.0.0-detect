@@ -20,12 +20,14 @@
 
 package edu.umd.cs.findbugs.detect;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
 import edu.umd.cs.findbugs.BugInstance;
 import edu.umd.cs.findbugs.BugReporter;
 import edu.umd.cs.findbugs.OpcodeStack;
+import edu.umd.cs.findbugs.ba.ClassContext;
 import edu.umd.cs.findbugs.bcel.OpcodeStackDetector;
 import edu.umd.cs.findbugs.internalAnnotations.StaticConstant;
 import edu.umd.cs.findbugs.visitclass.PreorderVisitor;
@@ -70,15 +72,22 @@ public class BadResultSetAccess extends OpcodeStackDetector {
     }
 
     @Override
+    public void visitClassContext(ClassContext classContext) {
+        if(hasInterestingClass(classContext.getJavaClass().getConstantPool(), Collections.singleton("java/sql/ResultSet"))) {
+            super.visitClassContext(classContext);
+        }
+    }
+
+    @Override
     public void sawOpcode(int seen) {
 
         if (seen == INVOKEINTERFACE) {
             String methodName = getNameConstantOperand();
             String clsConstant = getClassConstantOperand();
-            if ((clsConstant.equals("java/sql/ResultSet") && ((methodName.startsWith("get") && dbFieldTypesSet
+            if (("java/sql/ResultSet".equals(clsConstant) && ((methodName.startsWith("get") && dbFieldTypesSet
                     .contains(methodName.substring(3))) || (methodName.startsWith("update") && dbFieldTypesSet
                             .contains(methodName.substring(6)))))
-                            || ((clsConstant.equals("java/sql/PreparedStatement") && ((methodName.startsWith("set") && dbFieldTypesSet
+                            || (("java/sql/PreparedStatement".equals(clsConstant) && ((methodName.startsWith("set") && dbFieldTypesSet
                                     .contains(methodName.substring(3))))))) {
                 String signature = getSigConstantOperand();
                 int numParms = PreorderVisitor.getNumberArguments(signature);
@@ -87,7 +96,7 @@ public class BadResultSetAccess extends OpcodeStackDetector {
 
                     if ("I".equals(item.getSignature()) && item.couldBeZero()) {
                         bugReporter.reportBug(new BugInstance(this,
-                                clsConstant.equals("java/sql/PreparedStatement") ? "SQL_BAD_PREPARED_STATEMENT_ACCESS"
+                                "java/sql/PreparedStatement".equals(clsConstant) ? "SQL_BAD_PREPARED_STATEMENT_ACCESS"
                                         : "SQL_BAD_RESULTSET_ACCESS", item.mustBeZero() ? HIGH_PRIORITY : NORMAL_PRIORITY)
                         .addClassAndMethod(this).addSourceLine(this));
                     }

@@ -154,7 +154,7 @@ public class InfiniteLoop extends OpcodeStackDetector {
                 return false;
             }
             ForwardConditionalBranch that = (ForwardConditionalBranch) o;
-            return this.item0.equals(that.item0) && this.item1.equals(that.item1);
+            return this.item0.sameValue(that.item0) && this.item1.sameValue(that.item1);
         }
 
     }
@@ -507,7 +507,7 @@ public class InfiniteLoop extends OpcodeStackDetector {
                 bug.lowerPriorityALot();
             } else {
                 LocalVariableAnnotation lv = bug.getPrimaryLocalVariableAnnotation();
-                if (lv == null && getMethodName().equals("run")) {
+                if (lv == null && "run".equals(getMethodName())) {
                     bug.lowerPriority();
                 }
             }

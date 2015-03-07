@@ -45,6 +45,7 @@ import edu.umd.cs.findbugs.IntAnnotation;
 import edu.umd.cs.findbugs.SourceLineAnnotation;
 import edu.umd.cs.findbugs.StringAnnotation;
 import edu.umd.cs.findbugs.SystemProperties;
+import edu.umd.cs.findbugs.ba.AnalysisContext;
 import edu.umd.cs.findbugs.ba.BasicBlock;
 import edu.umd.cs.findbugs.ba.CFG;
 import edu.umd.cs.findbugs.ba.DataflowAnalysisException;
@@ -67,6 +68,7 @@ import edu.umd.cs.findbugs.ba.type.TypeFrame;
 import edu.umd.cs.findbugs.bcel.CFGDetector;
 import edu.umd.cs.findbugs.classfile.CheckedAnalysisException;
 import edu.umd.cs.findbugs.classfile.ClassDescriptor;
+import edu.umd.cs.findbugs.classfile.DescriptorFactory;
 import edu.umd.cs.findbugs.classfile.Global;
 import edu.umd.cs.findbugs.classfile.IAnalysisCache;
 import edu.umd.cs.findbugs.classfile.MethodDescriptor;
@@ -311,12 +313,24 @@ public class FindUnsatisfiedObligation extends CFGDetector {
         private void reportWarning(Obligation obligation, State state, StateSet factAtExit) {
             String className = obligation.getClassName();
 
-            if (methodDescriptor.isStatic() && methodDescriptor.getName().equals("main")
-                    && methodDescriptor.getSignature().equals("([Ljava/lang/String;)V")
+            if (methodDescriptor.isStatic() && "main".equals(methodDescriptor.getName())
+                    && "([Ljava/lang/String;)V".equals(methodDescriptor.getSignature())
                     && (className.contains("InputStream") || className.contains("Reader") || factAtExit.isOnExceptionPath())) {
                 // Don't report unclosed input streams and readers in main()
                 // methods
                 return;
+            }
+
+            if (methodDescriptor.getName().equals("<init>")) {
+                try {
+
+                    if (subtypes2.isSubtype(methodDescriptor.getClassDescriptor(), DescriptorFactory.createClassDescriptorFromDottedClassName(obligation.getClassName()))) {
+                        return;
+                    }
+
+                } catch (Exception e) {
+                    AnalysisContext.logError("huh", e);
+                }
             }
             String bugPattern = factAtExit.isOnExceptionPath() ? "OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE" : "OBL_UNSATISFIED_OBLIGATION";
             BugInstance bugInstance = new BugInstance(FindUnsatisfiedObligation.this, bugPattern,
@@ -514,7 +528,7 @@ public class FindUnsatisfiedObligation extends CFGDetector {
                 }
 
                 String methodName = inv.getMethodName(cpg);
-                Type producedType = methodName.equals("<init>") ? inv.getReferenceType(cpg) : inv.getReturnType(cpg);
+                Type producedType = "<init>".equals(methodName) ? inv.getReferenceType(cpg) : inv.getReturnType(cpg);
 
                 if (DEBUG_FP && !(producedType instanceof ObjectType)) {
                     System.out.println("Produced type " + producedType + " not an ObjectType");

@@ -181,6 +181,12 @@ public class CheckExpectedWarnings implements Detector2, NonReportingDetector {
         if (DEBUG) {
             System.out.println("CEW: checking " + xclass.toString());
         }
+        if (xclass.isSynthetic()) {
+            if (DEBUG) {
+                System.out.println("Skipping synthetic classxclass " + xclass.toString());
+            }
+            return;
+        }
         check(xclass, expectWarning, true, HIGH_PRIORITY);
         check(xclass, desireWarning, true, NORMAL_PRIORITY);
         check(xclass, noWarning, false, HIGH_PRIORITY);
@@ -190,6 +196,12 @@ public class CheckExpectedWarnings implements Detector2, NonReportingDetector {
             if (DEBUG) {
                 System.out.println("CEW: checking " + xmethod.toString());
             }
+            if (xmethod.isSynthetic()) {
+                if (DEBUG) {
+                    System.out.println("Skipping synthetic method " + xmethod.toString());
+                }
+                continue;
+            }
             check(xmethod, expectWarning, true, HIGH_PRIORITY);
             check(xmethod, desireWarning, true, NORMAL_PRIORITY);
             check(xmethod, noWarning, false, HIGH_PRIORITY);
@@ -198,6 +210,12 @@ public class CheckExpectedWarnings implements Detector2, NonReportingDetector {
         for (XField xfield : xclass.getXFields()) {
             if (DEBUG) {
                 System.out.println("CEW: checking " + xfield.toString());
+            }
+            if (xfield.isSynthetic()) {
+                if (DEBUG) {
+                    System.out.println("Skipping synthetic field " + xfield.toString());
+                }
+                continue;
             }
             check(xfield, expectWarning, true, HIGH_PRIORITY);
             check(xfield, desireWarning, true, NORMAL_PRIORITY);
@@ -300,6 +318,9 @@ public class CheckExpectedWarnings implements Detector2, NonReportingDetector {
         Collection<SourceLineAnnotation> bugs = countWarnings(warnings, bugCode, minPriority,
                 rank);
         if (expectWarnings && bugs.size() < num) {
+            if (DetectorFactoryCollection.instance().isDisabledByDefault(bugCode)) {
+                return;
+            }
             BugInstance bug = makeWarning("FB_MISSING_EXPECTED_WARNING", methodDescriptor, priority, cd).addString(bugCodeMessage);
             if (!bugs.isEmpty()) {
                 bug.addString(String.format("Expected %d bugs, saw %d", num, bugs.size()));
@@ -342,6 +363,7 @@ public class CheckExpectedWarnings implements Detector2, NonReportingDetector {
     private static Collection<SourceLineAnnotation> countWarnings( Collection<BugInstance> warnings,
             @CheckForNull String bugCode,
             int desiredPriority, int rank) {
+
         Collection<SourceLineAnnotation> matching = new HashSet<SourceLineAnnotation>();
         DetectorFactoryCollection i18n = DetectorFactoryCollection.instance();
         boolean matchPattern = false;
@@ -389,7 +411,7 @@ public class CheckExpectedWarnings implements Detector2, NonReportingDetector {
         }
         for (BugPattern b : DetectorFactoryCollection.instance().getBugPatterns()) {
             String category = b.getCategory();
-            if (!b.isDeprecated() && !category.equals("EXPERIMENTAL") && !claimedReported.contains(b)) {
+            if (!b.isDeprecated() && !"EXPERIMENTAL".equals(category) && !claimedReported.contains(b)) {
                 AnalysisContext.logError("No detector claims " + b.getType());
             }
         }

@@ -22,6 +22,7 @@ import java.util.BitSet;
 
 import org.apache.bcel.Constants;
 import org.apache.bcel.classfile.Code;
+import org.apache.bcel.generic.Type;
 
 import edu.umd.cs.findbugs.BugAccumulator;
 import edu.umd.cs.findbugs.BugInstance;
@@ -38,7 +39,11 @@ import edu.umd.cs.findbugs.ba.CheckReturnValueAnnotation;
 import edu.umd.cs.findbugs.ba.ClassContext;
 import edu.umd.cs.findbugs.ba.XFactory;
 import edu.umd.cs.findbugs.ba.XMethod;
+import edu.umd.cs.findbugs.ba.ch.Subtypes2;
 import edu.umd.cs.findbugs.bcel.OpcodeStackDetector;
+import edu.umd.cs.findbugs.classfile.Global;
+import edu.umd.cs.findbugs.detect.FindNoSideEffectMethods.NoSideEffectMethodsDatabase;
+import edu.umd.cs.findbugs.util.ClassName;
 import edu.umd.cs.findbugs.visitclass.PreorderVisitor;
 
 /**
@@ -75,8 +80,13 @@ public class MethodReturnCheck extends OpcodeStackDetector implements UseAnnotat
 
     private int callPC;
 
+    private final NoSideEffectMethodsDatabase noSideEffectMethods;
+
+    private boolean sawExcludedNSECall;
+
     public MethodReturnCheck(BugReporter bugReporter) {
         this.bugAccumulator = new BugAccumulator(bugReporter);
+        this.noSideEffectMethods = Global.getAnalysisCache().getDatabase(NoSideEffectMethodsDatabase.class);
     }
 
     @Override
@@ -87,6 +97,14 @@ public class MethodReturnCheck extends OpcodeStackDetector implements UseAnnotat
 
     @Override
     public void visitAfter(Code code) {
+        if(bugAccumulator.getLastBugLocation() == null && !sawExcludedNSECall && noSideEffectMethods.useless(getMethodDescriptor())) {
+            // Do not report UC_USELESS_VOID_METHOD if something was already reported inside the current method
+            // it's likely that UC_USELESS_VOID_METHOD is just the consequence of the previous report
+            bugAccumulator.accumulateBug(new BugInstance(this, "UC_USELESS_VOID_METHOD",
+                    code.getCode().length > 40 ? HIGH_PRIORITY : code.getCode().length > 15 ? NORMAL_PRIORITY : LOW_PRIORITY)
+            .addClassAndMethod(getMethodDescriptor()), this);
+        }
+        sawExcludedNSECall = false;
         bugAccumulator.reportAccumulatedBugs();
     }
 
@@ -112,15 +130,15 @@ public class MethodReturnCheck extends OpcodeStackDetector implements UseAnnotat
 
 
         if (m.isStatic() || !m.isResolved()) {
-            if (name.equals("compare") && m.getClassName().startsWith("com.google.common.primitives.")) {
+            if ("compare".equals(name) && m.getClassName().startsWith("com.google.common.primitives.")) {
                 return true;
             }
         }
         if (!m.isStatic() || !m.isResolved()) {
-            if (name.equals("compareTo") && m.getSignature().equals("(Ljava/lang/Object;)I")) {
+            if ("compareTo".equals(name) && "(Ljava/lang/Object;)I".equals(m.getSignature())) {
                 return true;
             }
-            if (name.equals("compare") && m.getSignature().equals("(Ljava/lang/Object;Ljava/lang/Object;)I")) {
+            if ("compare".equals(name) && "(Ljava/lang/Object;Ljava/lang/Object;)I".equals(m.getSignature())) {
                 return true;
             }
         }
@@ -157,10 +175,10 @@ public class MethodReturnCheck extends OpcodeStackDetector implements UseAnnotat
             break;
         }
 
-        checkForInitWithoutCopyOnStack: if (seen == INVOKESPECIAL && getNameConstantOperand().equals("<init>")) {
+        checkForInitWithoutCopyOnStack: if (seen == INVOKESPECIAL && "<init>".equals(getNameConstantOperand())) {
             int arguments = PreorderVisitor.getNumberArguments(getSigConstantOperand());
             OpcodeStack.Item invokedOn = stack.getStackItem(arguments);
-            if (invokedOn.isNewlyAllocated() && (!getMethodName().equals("<init>") || invokedOn.getRegisterNumber() != 0)) {
+            if (invokedOn.isNewlyAllocated() && (!"<init>".equals(getMethodName()) || invokedOn.getRegisterNumber() != 0)) {
 
                 for (int i = arguments + 1; i < stack.getStackDepth(); i++) {
                     OpcodeStack.Item item = stack.getStackItem(i);
@@ -220,10 +238,39 @@ public class MethodReturnCheck extends OpcodeStackDetector implements UseAnnotat
         {
             CheckReturnValueAnnotation annotation = checkReturnAnnotationDatabase.getResolvedAnnotation(callSeen, false);
             if (annotation == null) {
-                XFactory xFactory = AnalysisContext.currentXFactory();
+                if (noSideEffectMethods.excluded(callSeen.getMethodDescriptor())) {
+                    sawExcludedNSECall = true;
+                }
+                if (noSideEffectMethods.hasNoSideEffect(callSeen.getMethodDescriptor())) {
+                    int priority = NORMAL_PRIORITY;
+                    Type callReturnType = Type.getReturnType(callSeen.getMethodDescriptor().getSignature());
+                    Type methodReturnType = Type.getReturnType(getMethodSig());
+                    if(callReturnType.equals(methodReturnType) && callReturnType != Type.BOOLEAN && callReturnType != Type.VOID) {
+                        priority = HIGH_PRIORITY;
+                    } else {
+                        String callReturnClass = callSeen.getName().equals("<init>") ?
+                                callSeen.getClassDescriptor().getClassName() :
+                                    ClassName.fromFieldSignature(callReturnType.getSignature());
 
-                if (xFactory.isFunctionshatMightBeMistakenForProcedures(callSeen.getMethodDescriptor())) {
-                    annotation = CheckReturnValueAnnotation.CHECK_RETURN_VALUE_INFERRED;
+                                String methodReturnClass = ClassName.fromFieldSignature(methodReturnType.getSignature());
+                                if(callReturnClass != null && methodReturnClass != null &&
+                                        Subtypes2.instanceOf(ClassName.toDottedClassName(callReturnClass), ClassName.toDottedClassName(methodReturnClass))) {
+                                    priority = HIGH_PRIORITY;
+                                }
+                    }
+                    int catchSize = getSizeOfSurroundingTryBlock(getPC());
+                    if(catchSize <= 2) {
+                        priority++;
+                    }
+                    BugInstance warning = new BugInstance(this, "RV_RETURN_VALUE_IGNORED_NO_SIDE_EFFECT", priority)
+                    .addClassAndMethod(this).addMethod(callSeen).describe(MethodAnnotation.METHOD_CALLED);
+                    bugAccumulator.accumulateBug(warning, SourceLineAnnotation.fromVisitedInstruction(this, callPC));
+                } else {
+                    XFactory xFactory = AnalysisContext.currentXFactory();
+
+                    if (xFactory.isFunctionshatMightBeMistakenForProcedures(callSeen.getMethodDescriptor())) {
+                        annotation = CheckReturnValueAnnotation.CHECK_RETURN_VALUE_INFERRED;
+                    }
                 }
             }
             if (annotation != null && annotation.getPriority() <= LOW_PRIORITY) {
@@ -246,11 +293,11 @@ public class MethodReturnCheck extends OpcodeStackDetector implements UseAnnotat
                 if (callSeen.isPrivate()) {
                     priority++;
                 }
-                if (callSeen.getName().equals("clone") || callSeen.getName().startsWith("get")) {
+                if ("clone".equals(callSeen.getName()) || callSeen.getName().startsWith("get")) {
                     priority++;
                 }
                 String pattern = annotation.getPattern();
-                if (callSeen.getName().equals("<init>")
+                if ("<init>".equals(callSeen.getName())
                         && (callSeen.getClassName().endsWith("Exception") || callSeen.getClassName().endsWith("Error"))) {
                     pattern = "RV_EXCEPTION_NOT_THROWN";
                 }

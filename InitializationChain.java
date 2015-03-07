@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -82,9 +83,9 @@ public class InitializationChain extends BytecodeScanningDetector {
         Method staticInitializer = null;
         for(Method m : obj.getMethods()) {
             String name = m.getName();
-            if (name.equals("<clinit>")) {
+            if ("<clinit>".equals(name)) {
                 staticInitializer = m;
-            } else if (name.equals("<init>")) {
+            } else if ("<init>".equals(name)) {
                 visitOrder.add(m);
             }
 
@@ -102,7 +103,7 @@ public class InitializationChain extends BytecodeScanningDetector {
         super.visit(obj);
         staticFieldsRead.put(getXMethod(), fieldsReadInThisConstructor);
         requires.remove(getDottedClassName());
-        if (getDottedClassName().equals("java.lang.System")) {
+        if ("java.lang.System".equals(getDottedClassName())) {
             requires.add("java.io.FileInputStream");
             requires.add("java.io.FileOutputStream");
             requires.add("java.io.BufferedInputStream");
@@ -133,7 +134,7 @@ public class InitializationChain extends BytecodeScanningDetector {
     public void sawOpcode(int seen) {
         InvocationInfo prev = lastInvocation;
         lastInvocation = null;
-        if (getMethodName().equals("<init>")) {
+        if ("<init>".equals(getMethodName())) {
             if (seen == GETSTATIC && getClassConstantOperand().equals(getClassName())) {
                 staticFieldsReadInAnyConstructor.add(getXFieldOperand());
                 fieldsReadInThisConstructor.add(getXFieldOperand());
@@ -141,7 +142,7 @@ public class InitializationChain extends BytecodeScanningDetector {
             return;
         }
 
-        if (seen == INVOKESPECIAL && getNameConstantOperand().equals("<init>") &&  getClassConstantOperand().equals(getClassName())) {
+        if (seen == INVOKESPECIAL && "<init>".equals(getNameConstantOperand()) &&  getClassConstantOperand().equals(getClassName())) {
 
             XMethod m = getXMethodOperand();
             Set<XField> read = staticFieldsRead.get(m);
@@ -218,13 +219,13 @@ public class InitializationChain extends BytecodeScanningDetector {
         compute();
         compute();
         compute();
-        Set<String> allClasses = classRequires.keySet();
 
-        for (String c : allClasses) {
+        for (Entry<String, Set<String>> entry : classRequires.entrySet()) {
+            String c = entry.getKey();
             if (DEBUG) {
                 System.out.println("Class " + c + " requires:");
             }
-            for (String needs : (classRequires.get(c))) {
+            for (String needs : entry.getValue()) {
                 if (DEBUG) {
                     System.out.println("  " + needs);
                 }

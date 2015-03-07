@@ -163,7 +163,7 @@ public class IncompatMask extends BytecodeScanningDetector implements StatelessD
         case IFLT:
         case IFGT:
         case IFGE:
-            if (state == 3 && isLong || state == 2 & !isLong) {
+            if (state == 3 && isLong || state == 2 && !isLong) {
                 long bits = getFlagBits(isLong, arg0);
                 boolean highbit = !isLong && (bits & 0x80000000) != 0 || isLong && bits < 0 && bits << 1 == 0;
                 boolean onlyLowBits = bits >>> 12 == 0;
@@ -223,7 +223,7 @@ public class IncompatMask extends BytecodeScanningDetector implements StatelessD
         if (dif != 0) {
             // System.out.println("Match at offset " + getPC());
             BugInstance bug = new BugInstance(this, t, HIGH_PRIORITY).addClassAndMethod(this);
-            if (!t.equals("BIT_AND_ZZ")) {
+            if (!"BIT_AND_ZZ".equals(t)) {
                 bug.addString("0x" + Long.toHexString(arg0)).addString("0x" + Long.toHexString(arg1));
             }
 

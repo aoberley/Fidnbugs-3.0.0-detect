@@ -19,11 +19,14 @@
 
 package edu.umd.cs.findbugs.detect;
 
+import java.util.Collections;
+
 import org.apache.bcel.classfile.Code;
 
 import edu.umd.cs.findbugs.BugInstance;
 import edu.umd.cs.findbugs.BugReporter;
 import edu.umd.cs.findbugs.OpcodeStack;
+import edu.umd.cs.findbugs.ba.ClassContext;
 import edu.umd.cs.findbugs.ba.XClass;
 import edu.umd.cs.findbugs.ba.XMethod;
 import edu.umd.cs.findbugs.bcel.OpcodeStackDetector;
@@ -47,6 +50,13 @@ public class AtomicityProblem extends OpcodeStackDetector {
 
     public AtomicityProblem(BugReporter bugReporter) {
         this.bugReporter = bugReporter;
+    }
+
+    @Override
+    public void visitClassContext(ClassContext classContext) {
+        if(hasInterestingClass(classContext.getJavaClass().getConstantPool(), Collections.singleton("java/util/concurrent/ConcurrentHashMap"))) {
+            super.visitClassContext(classContext);
+        }
     }
 
     @Override
@@ -77,8 +87,8 @@ public class AtomicityProblem extends OpcodeStackDetector {
                 System.out.println("Stack top: " + top);
             }
             XMethod m = top.getReturnValueOf();
-            if (m != null && m.getClassName().equals("java.util.concurrent.ConcurrentHashMap")
-                    && m.getName().equals("containsKey")) {
+            if (m != null && "java.util.concurrent.ConcurrentHashMap".equals(m.getClassName())
+                    && "containsKey".equals(m.getName())) {
                 lastQuestionableCheckTarget = getBranchTarget();
                 if (seen == IFEQ) {
                     priority = LOW_PRIORITY;
@@ -98,7 +108,7 @@ public class AtomicityProblem extends OpcodeStackDetector {
             if (DEBUG) {
                 System.out.println("Found null check");
             }
-            if (m != null && m.getClassName().equals("java.util.concurrent.ConcurrentHashMap") && m.getName().equals("get")) {
+            if (m != null && "java.util.concurrent.ConcurrentHashMap".equals(m.getClassName()) && "get".equals(m.getName())) {
                 lastQuestionableCheckTarget = getBranchTarget();
                 if (seen == IFNULL) {
                     priority = LOW_PRIORITY;
@@ -110,10 +120,10 @@ public class AtomicityProblem extends OpcodeStackDetector {
         }
         case INVOKEVIRTUAL:
         case INVOKEINTERFACE: {
-            if (getDottedClassConstantOperand().equals("java.util.concurrent.ConcurrentHashMap")) {
+            if ("java.util.concurrent.ConcurrentHashMap".equals(getDottedClassConstantOperand())) {
                 String methodName = getNameConstantOperand();
                 XClass xClass = getXClassOperand();
-                if (xClass != null && methodName.equals("put")) {
+                if (xClass != null && "put".equals(methodName)) {
                     if ((getPC() < lastQuestionableCheckTarget) && (lastQuestionableCheckTarget != -1)) {
                         bugReporter.reportBug(new BugInstance(this, "AT_OPERATION_SEQUENCE_ON_CONCURRENT_ABSTRACTION", priority)
                         .addClassAndMethod(this).addType(xClass.getClassDescriptor()).addCalledMethod(this)

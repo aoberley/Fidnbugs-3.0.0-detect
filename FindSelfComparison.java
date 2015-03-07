@@ -105,7 +105,8 @@ public class FindSelfComparison extends OpcodeStackDetector {
             XClass x = getXClassOperand();
 
             checkPUTFIELD: if (putFieldPC + 10 > getPC() && f != null && obj != null && f.equals(putFieldXField)
-                    && !f.isSynthetic() && obj.equals(putFieldObj) && x != null) {
+                    && !f.isSynthetic() && obj.sameValue(putFieldObj) && x != null) {
+
 
                 LineNumberTable table = getCode().getLineNumberTable();
                 if (table != null) {
@@ -168,7 +169,7 @@ public class FindSelfComparison extends OpcodeStackDetector {
             resetDoubleAssignmentState();
         } else if (seen == GETFIELD && Util.nullSafeEquals(getXFieldOperand(), putFieldXField)) {
             OpcodeStack.Item obj = stack.getStackItem(0);
-            if (obj.equals(putFieldObj)) {
+            if (obj.sameValue(putFieldObj)) {
                 resetDoubleAssignmentState();
             }
         }
@@ -262,10 +263,10 @@ public class FindSelfComparison extends OpcodeStackDetector {
             OpcodeStack.Item item0 = stack.getStackItem(0);
             OpcodeStack.Item item1 = stack.getStackItem(1);
 
-            if (item0.getSignature().equals("D") || item0.getSignature().equals("F")) {
+            if ("D".equals(item0.getSignature()) || "F".equals(item0.getSignature())) {
                 return;
             }
-            if (item1.getSignature().equals("D") || item1.getSignature().equals("F")) {
+            if ("D".equals(item1.getSignature()) || "F".equals(item1.getSignature())) {
                 return;
             }
 
@@ -319,7 +320,7 @@ public class FindSelfComparison extends OpcodeStackDetector {
                 bugAccumulator.accumulateBug(bug, this);
             }
 
-            else if (opCode == IXOR && item0.equals(item1)) {
+            else if (opCode == IXOR && item0.sameValue(item1)) {
                 LocalVariableAnnotation localVariableAnnotation = LocalVariableAnnotation.getLocalVariableAnnotation(this, item0);
                 if (localVariableAnnotation != null) {
                     bugAccumulator.accumulateBug(
